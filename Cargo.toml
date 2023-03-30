@@ -1,0 +1,23 @@
+[package]
+name = "st7567s"
+description = "Driver for the ST7567S LCD controller"
+authors = ["Vasilii Ianguzin <vasiliy.kattouf@gmail.com>"]
+categories = ["embedded", "no-std"]
+version = "0.1.0"
+edition = "2021"
+documentation = "https://docs.rs/st7567s"
+keywords = ["no-std", "st7567s", "lcd", "embedded", "embedded-hal-driver", "graphics", "display"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/kattouf/st7567s"
+exclude = ["doc"]
+
+[dependencies]
+embedded-hal = "0.2.6"
+embedded-graphics-core = { version = "0.3.3", optional = true }
+display-interface = "0.4.1"
+display-interface-i2c = "0.4.0"
+
+[features]
+default = ["graphics"]
+graphics = ["embedded-graphics-core"]
