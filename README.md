@@ -1,4 +1,7 @@
-ST7567S Display Controller Driver
+# ST7567S Display Controller Driver
+
+[![Crates.io](https://img.shields.io/crates/v/st7567s.svg)](https://crates.io/crates/st7567s)
+[![Docs.rs](https://docs.rs/st7567s/badge.svg)](https://docs.rs/st7567s)
 
 This crate provides a driver for the ST7567S display controller that can be used with Rust embedded projects.
 
