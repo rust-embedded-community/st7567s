@@ -1,4 +1,4 @@
-//! ST7567S Display Controller Driver
+//! # ST7567S Display Controller Driver
 //!
 //! This crate provides a driver for the ST7567S display controller that can be used with Rust embedded projects.
 //!
@@ -16,6 +16,7 @@
 //! [`draw`]: crate::display::ST7567S#method.draw
 //!
 //! **Note**: This driver is designed to work with a more generic 128x64 resolution, instead of the original 132x65 resolution of the ST7567S controller.
+//! **Note**: SPI communication is not tested yet.
 
 #![no_std]
 
