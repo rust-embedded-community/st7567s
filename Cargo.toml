@@ -18,6 +18,9 @@ embedded-graphics-core = { version = "0.3.3", optional = true }
 display-interface = "0.4.1"
 display-interface-i2c = "0.4.0"
 
+[dev-dependencies]
+embedded-graphics = "0.7.1"
+
 [features]
 default = ["graphics"]
 graphics = ["embedded-graphics-core"]

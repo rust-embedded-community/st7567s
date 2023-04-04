@@ -3,13 +3,11 @@
 use crate::{command::*, consts::*};
 use display_interface::{DisplayError, WriteOnlyDataCommand};
 
-const BUFFER_SIZE: usize = (DISPLAY_WIDTH as usize) * (DISPLAY_HEIGHT as usize) / 8;
-
-/// ST7565S display driver\
+/// ST7565S display driver
 ///
-/// - Provides two display modes:
-///   - Internal Buffer Mode: This mode allows you to modify an internal buffer by using methods like [`set_pixel`], [`clear`], or by using the [`embedded-graphics`] crate. Once you have made your changes, you can call the [`flush`] method to write the buffer to the display.
-///   - Direct Write Mode: This mode allows you to write directly to the display memory by calling the [`draw`] method.
+///  Works in two modes:
+///  - Direct Write Mode (by default): This mode allows you to write directly to the display memory by calling the [`draw`] method.
+///  - Buffered Mode: This mode allows you to modify an internal buffer by using methods like [`set_pixel`], [`clear`], or by using the [`embedded-graphics`] crate. Once you have made your changes, you can call the [`flush`] method to write the buffer to the display.
 ///
 /// [`embedded-graphics`]: https://docs.rs/embedded-graphics
 /// [`set_pixel`]: crate::display::ST7567S#method.set_pixel
@@ -17,22 +15,88 @@ const BUFFER_SIZE: usize = (DISPLAY_WIDTH as usize) * (DISPLAY_HEIGHT as usize) 
 /// [`flush`]: crate::display::ST7567S#method.flush
 /// [`draw`]: crate::display::ST7567S#method.draw
 ///
-pub struct ST7567S<DI> {
-    display_interface: DI,
+pub struct ST7567S<DI, MODE> {
+    pub(crate) mode: MODE,
+    pub(crate) display_interface: DI,
+}
+
+/// Basic mode allowing only direct write to the screen controller memory
+pub struct DirectWriteMode;
+
+/// Buffered mode allowing to collect changes and then flush them
+pub struct BufferedMode {
     buffer: [u8; BUFFER_SIZE],
 }
 
-impl<DI: WriteOnlyDataCommand> ST7567S<DI> {
-    /// Create new instance of ST7565S driver\
+impl BufferedMode {
+    pub(crate) fn new() -> Self {
+        BufferedMode {
+            buffer: [0; BUFFER_SIZE],
+        }
+    }
+}
+
+impl<DI: WriteOnlyDataCommand> ST7567S<DI, DirectWriteMode> {
+    /// Create new instance of ST7565S driver in DirectWriteMode
+    ///
     /// # Arguments
     /// * `display_interface` - The interface abstraction from `display_interface` crate
     pub fn new(display_interface: DI) -> Self {
         ST7567S {
+            mode: DirectWriteMode,
             display_interface,
-            buffer: [0; BUFFER_SIZE],
         }
     }
 
+    /// Move driver to buffered mode
+    pub fn into_buffered_graphics_mode(self) -> ST7567S<DI, BufferedMode> {
+        ST7567S {
+            mode: BufferedMode::new(),
+            display_interface: self.display_interface,
+        }
+    }
+}
+
+impl<DI: WriteOnlyDataCommand> ST7567S<DI, BufferedMode> {
+    /// Clear internal buffer
+    pub fn clear(&mut self) {
+        self.mode.buffer = [0; BUFFER_SIZE];
+    }
+
+    /// Set pixel in internal buffer
+    ///
+    /// Pixel coordinates starts from top left corner and goes to bottom right corner
+    pub fn set_pixel(&mut self, x: u8, y: u8, value: bool) -> Result<(), DisplayError> {
+        if x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT {
+            return Err(DisplayError::OutOfBoundsError);
+        }
+
+        let column: usize = x as usize;
+        let page: usize = (y / 8) as usize;
+        let page_bit = y % 8;
+
+        let byte_idx = page * (DISPLAY_WIDTH as usize) + column;
+        let byte = self.mode.buffer[byte_idx];
+        let bit_value: u8 = value.into();
+        let byte = byte & !(1 << page_bit) | (bit_value << page_bit);
+
+        self.mode.buffer[byte_idx] = byte;
+
+        Ok(())
+    }
+
+    /// Send internal buffer to the display
+    pub fn flush(&mut self) -> Result<(), DisplayError> {
+        Self::flush_buffer_chunks(
+            &mut self.display_interface,
+            self.mode.buffer.as_slice(),
+            (0, 0),
+            (DISPLAY_WIDTH - 1, DISPLAY_HEIGHT - 1),
+        )
+    }
+}
+
+impl<DI: WriteOnlyDataCommand, MODE> ST7567S<DI, MODE> {
     /// Send init commands to the display and turn it on
     pub fn init(&mut self) -> Result<(), DisplayError> {
         SetBiasCommand::Bias1_9.write(&mut self.display_interface)?;
@@ -49,47 +113,21 @@ impl<DI: WriteOnlyDataCommand> ST7567S<DI> {
             .unwrap()
             .write(&mut self.display_interface)?;
 
-        self.clear();
-        self.flush()?;
+        self.draw([0; BUFFER_SIZE].as_slice())?;
 
         DisplayOnCommand::On.write(&mut self.display_interface)?;
 
         Ok(())
     }
 
-    /// Reset some display parameters to default values: Start Line, Column Address, Page Address and COM Direction\
+    /// Reset some display parameters to default values: Start Line, Column Address, Page Address and COM Direction.
     /// Usually doesn't need to be called
     pub fn reset(&mut self) -> Result<(), DisplayError> {
         ResetCommand.write(&mut self.display_interface)
     }
 
-    /// Clear the display buffer
-    pub fn clear(&mut self) {
-        self.buffer = [0; BUFFER_SIZE];
-    }
-
-    /// Set pixel in the display buffer\
-    /// Pixel coordinates starts from top left corner and goes to bottom right corner
-    pub fn set_pixel(&mut self, x: u8, y: u8, value: bool) -> Result<(), DisplayError> {
-        if x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT {
-            return Err(DisplayError::OutOfBoundsError);
-        }
-
-        let column: usize = x as usize;
-        let page: usize = (y / 8) as usize;
-        let page_bit = y % 8;
-
-        let byte_idx = page * (DISPLAY_WIDTH as usize) + column;
-        let byte = self.buffer[byte_idx];
-        let bit_value: u8 = value.into();
-        let byte = byte & !(1 << page_bit) | (bit_value << page_bit);
-
-        self.buffer[byte_idx] = byte;
-
-        Ok(())
-    }
-
-    /// Send buffer to the display\
+    /// Send buffer to the display
+    ///
     /// Buffer represents by 8 pages of 128 columns where 1 byte represents 8 vertical pixels
     pub fn draw(&mut self, buffer: &[u8]) -> Result<(), DisplayError> {
         if buffer.len() != BUFFER_SIZE {
@@ -104,7 +142,7 @@ impl<DI: WriteOnlyDataCommand> ST7567S<DI> {
         )
     }
 
-    /// Send part of the buffer to the display\
+    /// Send part of the buffer to the display.
     /// Buffer represents by 8 pages of 128 columns where 1 byte represents 8 vertical pixels
     ///
     /// # Arguments
@@ -119,17 +157,7 @@ impl<DI: WriteOnlyDataCommand> ST7567S<DI> {
         Self::flush_buffer_chunks(&mut self.display_interface, buffer, top_left, bottom_right)
     }
 
-    /// Send internal buffer to the display
-    pub fn flush(&mut self) -> Result<(), DisplayError> {
-        Self::flush_buffer_chunks(
-            &mut self.display_interface,
-            self.buffer.as_slice(),
-            (0, 0),
-            (DISPLAY_WIDTH - 1, DISPLAY_HEIGHT - 1),
-        )
-    }
-
-    fn flush_buffer_chunks(
+    pub(crate) fn flush_buffer_chunks(
         display_interface: &mut DI,
         buffer: &[u8],
         top_left: (u8, u8),
