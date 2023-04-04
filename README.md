@@ -7,12 +7,13 @@ This crate provides a driver for the ST7567S display controller that can be used
 
 # Features
 
-- Supports I2C and SPI communication protocols via the [`display_interface`](https://docs.rs/display_interface) crate.
+- Supports I2C and SPI communication protocols via the [`display_interface`] crate.
 - Provides two display modes:
-  - Direct Write Mode (by default): This mode allows you to write directly to the display memory by calling the [`draw`] method.
-  - Buffered Mode: This mode allows you to modify an internal buffer by using methods like [`set_pixel`], [`clear`], or by using the [`embedded-graphics`] crate. Once you have made your changes, you can call the [`flush`] method to write the buffer to the display.
+  - Direct Write Mode (by default): This mode allows you to write directly to the display memory by calling the `draw` method.
+  - Buffered Mode: This mode allows you to modify an internal buffer by using methods like `set_pixel`, `clear`, or by using the [`embedded-graphics`] crate. Once you have made your changes, you can call the `flush` method to write the buffer to the display.
 
 [`embedded-graphics`]: https://docs.rs/embedded-graphics
+[`display_interface`]: https://docs.rs/display_interface
 
 # Notes
 
